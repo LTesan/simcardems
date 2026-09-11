@@ -1,0 +1,318 @@
+SIMCARDEMS USER-CHANGEABLE PARAMETERS
+=====================================
+
+This file documents the parameters intended to be changed when configuring a
+simulation. Defaults are taken from src/simcardems/config.py. Unless stated
+otherwise, times are in milliseconds.
+
+HOW TO CHANGE THEM
+------------------
+
+Python:
+
+    config = simcardems.Config(
+        geometry_path="demos/geometries/slab.h5",
+        T=100.0,
+        dt=0.05,
+        coupling_type="fully_coupled_ORdmm_Land",
+    )
+
+JSON (accepted by `simcardems run-json config.json`):
+
+    {
+      "geometry_path": "demos/geometries/slab.h5",
+      "T": 100.0,
+      "dt": 0.05,
+      "coupling_type": "fully_coupled_ORdmm_Land"
+    }
+
+The command `simcardems run --help` lists the subset available directly as
+command-line options. A JSON configuration or the Python API can set every
+Config field below.
+
+
+MAIN SIMULATION PARAMETERS (simcardems.Config)
+----------------------------------------------
+
+Output and input
+
+outdir (path, default: "results")
+    Directory in which simulation outputs and saved state are written.
+
+outfilename (string, default: "results.h5")
+    Name of the HDF5 results file inside outdir.
+
+geometry_path (path, default: "") [required for a normal run]
+    Path to the geometry/mesh HDF5 file.
+
+geometry_schema_path (path or null, default: null)
+    Path to the JSON schema describing the geometry file. If null when using
+    the CLI, the geometry path with its suffix changed to .json is used.
+
+load_state (boolean, default: false)
+    If true and outdir/state.h5 exists, resume from that saved state. Otherwise
+    create a new model state.
+
+cell_init_file (path, default: "")
+    JSON or HDF5 file containing cell-model initial conditions. Empty means use
+    the cell model's defaults.
+
+drug_factors_file (path, default: "")
+    JSON file whose key/value pairs override cell-model parameters, typically
+    ion-channel scaling factors used to represent a drug effect.
+
+popu_factors_file (path, default: "")
+    JSON file whose key/value pairs override cell-model parameters for a member
+    of a model population. These values are applied after drug factors, so the
+    population file wins if both files contain the same key.
+
+
+Time integration, pacing, and output frequency
+
+T (float, default: 1000)
+    Simulation end time.
+
+dt (float, default: 0.05)
+    Electrophysiology time-step size. A smaller value normally improves temporal
+    resolution/stability but increases runtime.
+
+PCL (float, default: 1000)
+    Pacing cycle length: the time between repeated electrical stimuli.
+
+save_freq (integer, default: 1)
+    Desired interval, in simulation-time units, between stored results. Internally
+    the code uses int(save_freq / dt), so use save_freq >= dt and choose values
+    compatible with dt to avoid truncation surprises or division/modulo errors.
+
+show_progress_bar (boolean, default: true)
+    Show a progress bar for single-process runs.
+
+
+Model selection and electrophysiology
+
+coupling_type (string, default: "fully_coupled_ORdmm_Land")
+    Selects the electromechanics coupling/model implementation. Valid values:
+      - fully_coupled_ORdmm_Land: strongly coupled ORdmm + Land model
+      - fully_coupled_Tor_Land: strongly coupled Tomek + Land model
+      - explicit_ORdmm_Land: explicitly coupled ORdmm + Land model
+      - pureEP_ORdmm_Land: ORdmm electrophysiology without mechanics
+
+disease_state (string, default: "healthy")
+    Cell-model phenotype. "healthy" keeps default parameters; "hf" applies the
+    hard-coded heart-failure scaling factors. Other strings currently behave
+    like healthy because only "hf" is specially handled.
+
+ep_ode_scheme (string, default: "GRL1") [currently not wired through Config]
+    Intended cbcbeat ODE integration scheme. setup_EM_model currently calls the
+    EP setup without passing this Config value, so changing it in Config has no
+    effect unless the code is updated or setup_solver is called directly.
+
+ep_preconditioner (string, default: "sor") [currently not wired through Config]
+    Intended preconditioner for the monodomain linear solve. The Config value is
+    currently not forwarded by setup_EM_model.
+
+ep_theta (float, default: 0.5) [currently not wired through Config]
+    Intended theta value for the PDE time discretization (0.5 is the centered
+    Crank-Nicolson choice). The Config value is currently not forwarded.
+
+
+Geometry resolution
+
+num_refinements (integer, default: 1)
+    Number of uniform refinements used to derive the electrophysiology mesh from
+    the mechanics mesh. Each 3-D refinement can increase computational cost and
+    memory substantially.
+
+
+Mechanics, material, and boundary conditions
+
+bnd_rigid (boolean, default: false)
+    Use rigid-motion-removal boundary conditions for mechanics instead of the
+    geometry-specific default boundary conditions.
+
+pre_stretch (float, Constant, or null, default: null)
+    Prescribed displacement/pre-stretch at the slab's right (X1) boundary. null
+    disables it. This is primarily a Python-API option and is not exposed by the
+    `run` CLI command.
+
+traction (float or Constant, default: null)
+    External Neumann load on the slab's right boundary. null disables it. In the
+    implemented convention, positive compresses and negative stretches.
+
+spring (float or Constant, default: null)
+    Robin-boundary spring stiffness at the slab's right boundary. null disables
+    the spring; higher values resist displacement more strongly.
+
+fix_right_plane (boolean, default: false)
+    Add a constraint on the slab's right plane. Despite the CLI wording, the
+    implementation fixes its x displacement. Intended only for slab geometry.
+
+set_material (string, default: "")
+    Passive mechanics material law. The exact value "Guccione" selects the
+    Guccione model; any other value selects the default Holzapfel-Ogden model.
+
+linear_mechanics_solver (string, default: "mumps") [currently not wired]
+    Intended linear solver for mechanics. setup_EM_model does not currently pass
+    this Config value to mechanics_model.setup_solver.
+
+mechanics_use_continuation (boolean, default: false) [currently inactive]
+    Intended to enable a continuation-based mechanics solve. The selection logic
+    in Runner is currently commented out, so changing this has no effect.
+
+mechanics_use_custom_newton_solver (boolean, default: false)
+    Use the project's custom Newton solver, which can update coupled ODE states
+    during Newton iterations, instead of the standard mechanics solver path.
+
+mechanics_solve_strategy (string, default: "adaptive")
+    Determines when mechanics is solved:
+      - "fixed": solve after the elapsed mechanics time exceeds dt_mech
+      - "adaptive": solve when the coupling-change norm reaches mech_threshold,
+        or when elapsed mechanics time exceeds dt_mech
+
+dt_mech (float, default: 1.0)
+    Maximum interval between mechanics solves. The code uses a strict `>` test,
+    so the solve can occur one EP step after this value is reached.
+
+mech_threshold (float, default: 0.05)
+    Coupling-change norm that triggers a mechanics solve with the adaptive
+    strategy. A smaller value generally causes mechanics to be solved more often.
+
+
+Diagnostics
+
+loglevel (integer, default: 20)
+    Logging verbosity using Python logging levels: 10=DEBUG, 20=INFO,
+    30=WARNING, 40=ERROR.
+
+debug_mode (boolean, default: false)
+    Enable extra diagnostic output, including mechanics residual collection where
+    the selected solver supports it. This can increase output size and runtime.
+
+
+GEOMETRY-CREATION PARAMETERS
+----------------------------
+
+These belong to SlabGeometry or LeftVentricularGeometry, not Config. They are
+used when generating/loading a geometry with a parameter dictionary.
+
+SlabGeometry defaults
+
+lx (float, default: 2.0)
+    Slab length in the x direction.
+
+ly (float, default: 0.7)
+    Slab length in the y direction.
+
+lz (float, default: 0.3)
+    Slab length in the z direction.
+
+dx (float, default: 0.2)
+    Target box-mesh spacing. Smaller values create a finer, more expensive mesh.
+
+fibers_angle_endo (float, default: 0)
+    Fiber angle at the endocardial side, in degrees.
+
+fibers_angle_epi (float, default: 0)
+    Fiber angle at the epicardial side, in degrees.
+
+fiber_space (string, default: "Quadrature_3")
+    Function-space family and degree used for fiber fields, encoded as
+    "family_degree".
+
+num_refinements (integer, default: 1)
+    Uniform refinement count for the electrophysiology mesh.
+
+mesh_type (string, default: the cardiac_geometries slab value)
+    Geometry type identifier stored in the geometry metadata. Normally leave it
+    unchanged for a slab.
+
+LeftVentricularGeometry defaults
+
+num_refinements (integer, default: 1)
+    Uniform refinement count for the electrophysiology mesh.
+
+fiber_space (string, default: "Quadrature_3")
+    Function-space family and degree used for fiber fields.
+
+fibers_angle_endo (float, default: -60.0)
+    Endocardial fiber angle, in degrees.
+
+fibers_angle_epi (float, default: 60.0)
+    Epicardial fiber angle, in degrees.
+
+mesh_type (string, default: the cardiac_geometries LV-ellipsoid value)
+    Geometry type identifier. Normally leave it unchanged for an LV ellipsoid.
+
+mu_apex_endo (float, default: -pi)
+    Prolate-spheroidal angular coordinate locating the endocardial apex.
+
+mu_apex_epi (float, default: -pi)
+    Prolate-spheroidal angular coordinate locating the epicardial apex.
+
+mu_base_endo (float, default: -1.2722641256100204)
+    Prolate-spheroidal angular coordinate locating the endocardial base.
+
+mu_base_epi (float, default: -1.318116071652818)
+    Prolate-spheroidal angular coordinate locating the epicardial base.
+
+psize_ref (float, default: 3.0)
+    Reference mesh element-size parameter used by LV geometry generation.
+
+r_long_endo (float, default: 17.0)
+    Endocardial long-axis radius.
+
+r_long_epi (float, default: 20.0)
+    Epicardial long-axis radius.
+
+r_short_endo (float, default: 7.0)
+    Endocardial short-axis radius.
+
+r_short_epi (float, default: 10.0)
+    Epicardial short-axis radius.
+
+
+ADVANCED PARAMETERS NOT EXPOSED BY Config
+-----------------------------------------
+
+Cell-model parameters
+    Each coupling type's cell_model.py contains a large default_parameters()
+    dictionary (ion-channel conductances, concentrations, kinetic constants,
+    Land active-tension constants, and scaling factors). Override selected keys
+    through drug_factors_file or popu_factors_file, or pass cell_params directly
+    to models.em_model.setup_EM_model(). Use only keys present in the selected
+    cell model; these are scientific model constants rather than generic run
+    controls, so their precise definitions come from the ORdmm/Tomek/Land model.
+
+Cell initial conditions
+    Each cell model also defines default_initial_conditions(). Override selected
+    state values with cell_init_file or with cell_inits through the lower-level
+    Python API. Initial conditions are state variables, not model parameters.
+
+EP stimulus and tissue constants (src/simcardems/ep_model.py)
+    setup_model() directly accepts PCL=1000, chi=140.0, C_m=0.01,
+    duration=2.0, and A=50000.0. Here chi is surface-to-volume ratio, C_m is
+    membrane capacitance, duration is stimulus duration, and A is stimulus
+    current-density amplitude. Only PCL is exposed through Config. Conductivities
+    sigma_il=0.17, sigma_it=0.019, sigma_el=0.62, and sigma_et=0.24 mS/mm are
+    currently hard-coded by default_conductivities() and explicitly marked in
+    the source as not externally changeable.
+
+Passive material constants (src/simcardems/mechanics_model.py)
+    Holzapfel-Ogden constants a, a_f, b, b_f, a_s, b_s, a_fs, and b_fs and the
+    Guccione constants CC, bf, bfs, and bt are currently hard-coded. Config can
+    select the material family with set_material, but cannot change these values.
+
+Newton/PETSc parameters (src/simcardems/newton_solver.py)
+    The custom solver has tolerances, iteration limits, verbosity flags, and
+    PETSc KSP/preconditioner settings in default_solver_parameters(). They are
+    advanced code-level settings and are not fields of Config.
+
+
+SOURCE OF TRUTH
+---------------
+
+Main defaults:       src/simcardems/config.py
+CLI-exposed subset:  src/simcardems/cli.py
+Geometry defaults:   src/simcardems/slabgeometry.py and lvgeometry.py
+EP constants:        src/simcardems/ep_model.py
+Mechanics constants: src/simcardems/mechanics_model.py and newton_solver.py
