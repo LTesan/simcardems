@@ -149,7 +149,7 @@ def parse_args() -> argparse.Namespace:
         default=Path("ventricular_database"),
         help="database directory (default: ventricular_database)",
     )
-    parser.add_argument("--run", action="store_false", help="run simulations after generating files")
+    parser.add_argument("--run", action="store_true", help="run simulations after generating files")
     return parser.parse_args()
 
 

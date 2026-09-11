@@ -4,6 +4,7 @@ demos/result*
 *.DS_Store
 *.vscode
 *.json
+!demos/ventricular_anatomical_ranges.json
 demos/release_test.md
 demos/release_test_results/
 demos/results_simple_demo/
